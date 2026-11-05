@@ -1,0 +1,106 @@
+# =========================================================
+# Build Directories
+# =========================================================
+build/
+build-*/
+out/
+cmake-build-*/
+bin/
+lib/
+
+# =========================================================
+# Qt Creator & IDE User Files
+# =========================================================
+.qtcreator/
+CMakeLists.txt.user*
+*.pro.user*
+*.pri.user*
+*.qbs.user*
+*.qmlproject.user*
+.qtc_clangd/
+.qmlls.ini
+.vscode/
+.idea/
+.vs/
+
+# =========================================================
+# CMake Generated Files
+# =========================================================
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Makefile
+*.cmake.in
+_deps/
+
+# =========================================================
+# Qt / MOC / RCC / UIC / QML Cache Generated Files
+# =========================================================
+*_autogen/
+mocs_compilation.cpp
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*.qmlc
+*.jsc
+*.aotstats
+.qt/
+.rcc/
+meta_types/
+qmltypes/
+*.qam
+*.qch
+
+# =========================================================
+# MSVC / C++ Compiler & Linker Outputs
+# =========================================================
+*.obj
+*.o
+*.lo
+*.la
+*.al
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.lib
+*.a
+*.dll
+*.so
+*.dylib
+*.exe
+*.manifest
+*.aps
+*.res
+*.pch
+*.ipch
+*.iobj
+*.ipdb
+*.pgc
+*.pgd
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.VC.db
+*.VC.opendb
+
+# =========================================================
+# OS & Temporary Files
+# =========================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+*.bak
+*.log
+
