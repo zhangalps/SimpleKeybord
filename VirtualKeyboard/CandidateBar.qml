@@ -4,7 +4,7 @@ import QtQuick.Layouts
 Rectangle {
     id: root
 
-    property bool showBar: true
+    property bool showBar: false
     property bool darkTheme: true
     property string pinyinText: ""
     property var candidates: []
@@ -14,19 +14,20 @@ Rectangle {
     signal candidateSelected(int index)
     signal prevPageClicked()
     signal nextPageClicked()
-    signal closeKeyboardClicked()
 
-    implicitHeight: showBar ? 48 : 0
-    Layout.fillWidth: true
-    Layout.preferredHeight: showBar ? 48 : 0
-    Layout.minimumHeight: showBar ? 48 : 0
-    Layout.maximumHeight: showBar ? 48 : 0
-    visible: showBar
+    height: 48
+    visible: showBar && (pinyinText.length > 0 || candidates.length > 0)
     clip: true
 
     color: darkTheme ? "#182030" : "#E2E8F0"
-    border.width: showBar ? 1 : 0
+    border.width: 1
     border.color: darkTheme ? "#2B374F" : "#CBD5E1"
+
+    // Prevent clicks on candidate bar background from passing through to underlying page
+    MouseArea {
+        anchors.fill: parent
+        onPressed: function(mouse) { mouse.accepted = true }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -34,10 +35,10 @@ Rectangle {
         anchors.rightMargin: 8
         spacing: 8
 
-        // Pre-edit Pinyin display pill
+        // Pre-edit Pinyin display pill (strictly 36px height, vertically centered in 48px bar)
         Rectangle {
             visible: root.pinyinText.length > 0
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: 36
             Layout.preferredWidth: Math.max(76, pinyinLabel.implicitWidth + 24)
             Layout.alignment: Qt.AlignVCenter
             radius: 6
@@ -47,35 +48,24 @@ Rectangle {
 
             Text {
                 id: pinyinLabel
-                anchors.centerIn: parent
+                anchors.fill: parent
                 text: root.pinyinText
                 font.pixelSize: 17
                 font.bold: true
                 font.family: "Consolas"
                 color: root.darkTheme ? "#60A5FA" : "#1D4ED8"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
 
-        // Empty hint when in Chinese mode with no active pinyin input
-        Text {
-            visible: root.pinyinText.length === 0 && root.candidates.length === 0
-            text: "中文拼音模式 · 请点击下方字母输入拼音"
-            font.pixelSize: 14
-            font.family: "Microsoft YaHei UI"
-            color: root.darkTheme ? "#94A3B8" : "#475569"
-            Layout.fillWidth: true
-            Layout.leftMargin: 6
-            Layout.alignment: Qt.AlignVCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        // Touch-friendly horizontal flickable candidate list
+        // Touch-friendly horizontal flickable candidate list (strictly 36px height, vertically centered)
         ListView {
             id: candidateListView
             visible: root.candidates.length > 0
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            contentHeight: height
+            Layout.preferredHeight: 36
+            Layout.alignment: Qt.AlignVCenter
             orientation: ListView.Horizontal
             spacing: 6
             clip: true
@@ -88,16 +78,15 @@ Rectangle {
                 required property int index
 
                 height: 36
-                width: Math.max(58, candText.implicitWidth + 24)
-                y: Math.round((candidateListView.height - height) / 2)
+                width: Math.max(58, candRow.implicitWidth + 24)
                 radius: 6
                 color: candTouch.pressed
                        ? (root.darkTheme ? "#2563EB" : "#3B82F6")
-                       : (index === 0 && root.pinyinText.length > 0
+                       : (index === 0
                           ? (root.darkTheme ? "#263554" : "#DBEAFE")
                           : (root.darkTheme ? "#232D42" : "#F8FAFC"))
                 border.width: 1
-                border.color: index === 0 && root.pinyinText.length > 0
+                border.color: index === 0
                               ? "#3B82F6"
                               : (root.darkTheme ? "#334155" : "#CBD5E1")
                 scale: candTouch.pressed ? 0.95 : 1.0
@@ -106,10 +95,12 @@ Rectangle {
                     NumberAnimation { duration: 50 }
                 }
 
-                Row {
-                    id: candText
-                    anchors.centerIn: parent
-                    spacing: 4
+                RowLayout {
+                    id: candRow
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    spacing: 3
 
                     Text {
                         text: (candItem.index + 1) + "."
@@ -118,7 +109,8 @@ Rectangle {
                         color: candTouch.pressed
                                ? "#E2E8F0"
                                : (root.darkTheme ? "#94A3B8" : "#64748B")
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.fillHeight: true
+                        verticalAlignment: Text.AlignVCenter
                     }
 
                     Text {
@@ -129,7 +121,8 @@ Rectangle {
                         color: candTouch.pressed
                                ? "#FFFFFF"
                                : (root.darkTheme ? "#F8FAFC" : "#0F172A")
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.fillHeight: true
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 
@@ -149,6 +142,7 @@ Rectangle {
             Rectangle {
                 Layout.preferredWidth: 46
                 Layout.preferredHeight: 36
+                Layout.alignment: Qt.AlignVCenter
                 radius: 6
                 visible: root.candidates.length > 0 || root.hasPrevPage || root.hasNextPage
                 enabled: root.hasPrevPage
@@ -160,10 +154,12 @@ Rectangle {
                 border.color: root.darkTheme ? "#36435C" : "#94A3B8"
 
                 Text {
-                    anchors.centerIn: parent
-                    text: "◀"
+                    anchors.fill: parent
+                    text: "\u25c0"
                     font.pixelSize: 15
                     color: root.darkTheme ? "#F1F5F9" : "#1E293B"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 MouseArea {
@@ -176,6 +172,7 @@ Rectangle {
             Rectangle {
                 Layout.preferredWidth: 46
                 Layout.preferredHeight: 36
+                Layout.alignment: Qt.AlignVCenter
                 radius: 6
                 visible: root.candidates.length > 0 || root.hasPrevPage || root.hasNextPage
                 enabled: root.hasNextPage
@@ -187,10 +184,12 @@ Rectangle {
                 border.color: root.darkTheme ? "#36435C" : "#94A3B8"
 
                 Text {
-                    anchors.centerIn: parent
-                    text: "▶"
+                    anchors.fill: parent
+                    text: "\u25b6"
                     font.pixelSize: 15
                     color: root.darkTheme ? "#F1F5F9" : "#1E293B"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 MouseArea {

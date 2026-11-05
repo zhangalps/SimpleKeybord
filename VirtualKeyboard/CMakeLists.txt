@@ -17,7 +17,6 @@ qt_add_qml_module(VirtualKeyboard
     QML_FILES
         VirtualKeyboard.qml
         CandidateBar.qml
-        HistoryDropdown.qml
         KeyButton.qml
     RESOURCES
         pinyin.txt

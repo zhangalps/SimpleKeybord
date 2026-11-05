@@ -15,20 +15,20 @@ Item {
     property Item activeInputItem: null
     // Current panel: 0 = QWERTY, 1 = 123 & Industrial Symbols, 2 = Extended Symbols
     property int panelIndex: 0
-    // Whether history dropdown is allowed to show for current focus session
-    property bool showHistoryPopup: false
 
     anchors.fill: parent
     z: 999
 
     readonly property bool darkTheme: InputEngine.darkTheme
-    readonly property bool showCandidateBar: InputEngine.chineseMode && !InputEngine.passwordMode
+    readonly property bool isZhLabel: InputEngine.globalLanguage.indexOf("zh") === 0
+                                      && (InputEngine.passwordMode ? true : InputEngine.chineseMode)
+    readonly property bool hasActivePinyin: InputEngine.chineseMode
+                                            && !InputEngine.passwordMode
+                                            && (InputEngine.pinyinDisplay.length > 0 || InputEngine.candidates.length > 0)
 
-    // Keyboard height takes ~46% of 7-inch screen when candidate bar is visible, ~38% when collapsed
-    readonly property real panelHeight: {
-        var baseRatio = showCandidateBar ? 0.47 : 0.39
-        return Math.round(Math.max(185, Math.min(260, root.height * baseRatio)))
-    }
+    // Constant key dock height (~39% of 7-inch screen) so keys never shift when candidate bar pops up
+    readonly property real keyDockHeight: Math.round(Math.max(185, Math.min(220, root.height * 0.40)))
+    readonly property real totalOccupiedHeight: keyDockHeight + (candidateBar.visible ? candidateBar.height : 0)
 
     // Apply smooth page lift directly to pageContainer if provided
     Binding {
@@ -56,9 +56,6 @@ Item {
         function onRequestShowKeyboard() {
             if (root.activeInputItem) {
                 root.keyboardVisible = true
-                if (InputEngine.historyEnabled && !InputEngine.passwordMode && InputEngine.historyList.length > 0) {
-                    root.showHistoryPopup = true
-                }
                 root.updateGeometryAndLift()
             }
         }
@@ -73,7 +70,6 @@ Item {
             root.panelIndex = 0
             InputEngine.bindTargetItem(item)
             root.keyboardVisible = true
-            root.showHistoryPopup = InputEngine.historyEnabled && !InputEngine.passwordMode && InputEngine.historyList.length > 0
             liftUpdateTimer.restart()
         } else if (!item || !isDescendantOfKeyboard(item)) {
             root.activeInputItem = null
@@ -94,43 +90,39 @@ Item {
 
     function closeKeyboard() {
         root.keyboardVisible = false
-        root.showHistoryPopup = false
         root.pageLiftOffset = 0
         InputEngine.clearPinyinBuffer()
     }
 
-    // Calculate anti-occlusion lift offset and history popup coordinates
+    function langButtonRichText() {
+        var dimColor = root.darkTheme ? "#64748B" : "#94A3B8"
+        if (InputEngine.chineseMode && !InputEngine.passwordMode) {
+            return "<b>\u4e2d</b><font color='" + dimColor + "'> / \u82f1</font>"
+        } else {
+            return "<font color='" + dimColor + "'>\u4e2d / </font><b>\u82f1</b>"
+        }
+    }
+
+    // Calculate anti-occlusion lift offset
     function updateGeometryAndLift() {
         if (!root.keyboardVisible || !root.activeInputItem) {
             root.pageLiftOffset = 0
             return
         }
 
-        // Map activeInputItem coordinates to root ( accounting for current pageLiftOffset )
         var posInRoot = root.activeInputItem.mapToItem(root, 0, 0)
         var unliftedTopY = posInRoot.y + root.pageLiftOffset
         var unliftedBottomY = unliftedTopY + root.activeInputItem.height
 
-        var kbTopY = root.height - root.panelHeight
-        var safetyMargin = 14
+        // Reserve space for potential candidate bar in Chinese mode so page doesn't bounce while typing
+        var effectiveKbHeight = root.keyDockHeight + (InputEngine.chineseMode && !InputEngine.passwordMode ? 48 : 0)
+        var kbTopY = root.height - effectiveKbHeight
+        var safetyMargin = 12
 
         if (unliftedBottomY + safetyMargin > kbTopY) {
             root.pageLiftOffset = Math.min(kbTopY - 40, unliftedBottomY + safetyMargin - kbTopY)
         } else {
             root.pageLiftOffset = 0
-        }
-
-        // Update history dropdown position relative to the lifted input position
-        var liftedTopY = unliftedTopY - root.pageLiftOffset
-        var liftedBottomY = unliftedBottomY - root.pageLiftOffset
-        historyDropdown.popupX = Math.max(8, Math.min(root.width - root.activeInputItem.width - 8, posInRoot.x))
-        historyDropdown.popupWidth = Math.max(240, root.activeInputItem.width)
-
-        var dropdownHeight = historyDropdown.height
-        if (liftedBottomY + dropdownHeight + 6 <= kbTopY) {
-            historyDropdown.popupY = liftedBottomY + 4
-        } else {
-            historyDropdown.popupY = Math.max(6, liftedTopY - dropdownHeight - 4)
         }
     }
 
@@ -141,40 +133,32 @@ Item {
         onTriggered: root.updateGeometryAndLift()
     }
 
-    onPanelHeightChanged: {
-        if (root.keyboardVisible) {
-            root.updateGeometryAndLift()
-        }
-    }
-
-    // History recommendation dropdown near the focused input field
-    HistoryDropdown {
-        id: historyDropdown
-        active: root.keyboardVisible && root.showHistoryPopup && !InputEngine.passwordMode && InputEngine.historyEnabled
+    // 1. Pinyin Candidate Bar (Docked directly above keyboardDock ONLY when active pinyin input exists)
+    CandidateBar {
+        id: candidateBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: keyboardDock.top
+        showBar: root.keyboardVisible && root.hasActivePinyin
         darkTheme: root.darkTheme
-        historyItems: InputEngine.historyList
+        pinyinText: InputEngine.pinyinDisplay
+        candidates: InputEngine.candidates
+        hasPrevPage: InputEngine.hasPrevPage
+        hasNextPage: InputEngine.hasNextPage
 
-        onHistorySelected: function(selectedText) {
-            InputEngine.applyHistoryItem(selectedText)
-            root.showHistoryPopup = false
+        onCandidateSelected: function(idx) {
+            InputEngine.selectCandidate(idx)
         }
-
-        onClearHistoryRequested: {
-            InputEngine.clearCurrentHistory()
-            root.showHistoryPopup = false
-        }
-
-        onCloseRequested: {
-            root.showHistoryPopup = false
-        }
+        onPrevPageClicked: InputEngine.prevCandidatePage()
+        onNextPageClicked: InputEngine.nextCandidatePage()
     }
 
-    // Main Keyboard Bottom Dock
+    // 2. Main Keyboard Bottom Dock
     Rectangle {
         id: keyboardDock
         anchors.left: parent.left
         anchors.right: parent.right
-        height: root.panelHeight
+        height: root.keyDockHeight
         y: root.keyboardVisible ? (root.height - height) : root.height
         visible: y < root.height
         color: root.darkTheme ? "#141A26" : "#E2E8F0"
@@ -194,517 +178,463 @@ Item {
             onPressed: function(mouse) { mouse.accepted = true }
         }
 
-        ColumnLayout {
+        // Key Rows Container
+        Item {
             anchors.fill: parent
-            spacing: 0
 
-            // 1. Pinyin Candidate Bar (auto-collapses in English or Password mode)
-            CandidateBar {
-                id: candidateBar
-                showBar: root.showCandidateBar
-                darkTheme: root.darkTheme
-                pinyinText: InputEngine.pinyinDisplay
-                candidates: InputEngine.candidates
-                hasPrevPage: InputEngine.hasPrevPage
-                hasNextPage: InputEngine.hasNextPage
+            // ============================================================
+            // PANEL 0: QWERTY Letter Keyboard
+            // ============================================================
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 4
+                visible: root.panelIndex === 0
 
-                onCandidateSelected: function(idx) {
-                    InputEngine.selectCandidate(idx)
+                // Row 1: Q W E R T Y U I O P
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    Repeater {
+                        model: [
+                            { k: "q", sub: "1" }, { k: "w", sub: "2" }, { k: "e", sub: "3" },
+                            { k: "r", sub: "4" }, { k: "t", sub: "5" }, { k: "y", sub: "6" },
+                            { k: "u", sub: "7" }, { k: "i", sub: "8" }, { k: "o", sub: "9" },
+                            { k: "p", sub: "0" }
+                        ]
+                        delegate: KeyButton {
+                            required property var modelData
+                            text: InputEngine.capsLock ? modelData.k.toUpperCase() : modelData.k
+                            subText: modelData.sub
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleKeyPress(text)
+                        }
+                    }
                 }
-                onPrevPageClicked: InputEngine.prevCandidatePage()
-                onNextPageClicked: InputEngine.nextCandidatePage()
-                onCloseKeyboardClicked: root.closeKeyboard()
+
+                // Row 2: A S D F G H J K L
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.leftMargin: 22
+                    Layout.rightMargin: 22
+                    spacing: 4
+
+                    Repeater {
+                        model: ["a", "s", "d", "f", "g", "h", "j", "k", "l"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: InputEngine.capsLock ? modelData.toUpperCase() : modelData
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleKeyPress(text)
+                        }
+                    }
+                }
+
+                // Row 3: CapsLock + Z X C V B N M + Backspace (Long-press auto-repeat)
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u21e7 \u5927\u5199" : "\u21e7 Caps"
+                        isFunctionKey: true
+                        isActiveState: InputEngine.capsLock
+                        showStatusDot: true
+                        statusActive: InputEngine.capsLock
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 74
+                        onClicked: InputEngine.toggleCapsLock()
+                    }
+
+                    Repeater {
+                        model: ["z", "x", "c", "v", "b", "n", "m"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: InputEngine.capsLock ? modelData.toUpperCase() : modelData
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleKeyPress(text)
+                        }
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u232b \u9000\u683c" : "\u232b Back"
+                        isFunctionKey: true
+                        autoRepeat: true
+                        repeatDelay: 400
+                        repeatInterval: 50
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 78
+                        onClicked: InputEngine.handleBackspace()
+                    }
+                }
+
+                // Row 4: 123 | 中/英 | _ | Space | . | 收起 | 确定(Enter)
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    KeyButton {
+                        text: root.isZhLabel ? "123/\u7b26" : "123/#"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 68
+                        onClicked: {
+                            InputEngine.clearPinyinBuffer()
+                            root.panelIndex = 1
+                        }
+                    }
+
+                    KeyButton {
+                        text: root.langButtonRichText()
+                        richText: true
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 68
+                        onClicked: InputEngine.toggleLanguageMode()
+                    }
+
+                    KeyButton {
+                        text: "_"
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 46
+                        onClicked: InputEngine.handleSymbolPress("_")
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u7a7a\u683c" : "Space"
+                        isFunctionKey: true
+                        fontPixelSize: 15
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 230
+                        onClicked: InputEngine.handleSpace()
+                    }
+
+                    KeyButton {
+                        text: "."
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 46
+                        onClicked: InputEngine.handleSymbolPress(".")
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u25bc \u6536\u8d77" : "\u25bc Hide"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 66
+                        onClicked: root.closeKeyboard()
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u21b5 \u786e\u5b9a" : "\u21b5 Enter"
+                        isFunctionKey: true
+                        isPrimaryKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 82
+                        onClicked: {
+                            InputEngine.handleEnter()
+                            root.closeKeyboard()
+                        }
+                    }
+                }
             }
 
-            // 2. Key Rows Container
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+            // ============================================================
+            // PANEL 1: 123 Numbers & High-Frequency Industrial Symbols
+            // ============================================================
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 4
+                visible: root.panelIndex === 1
 
-                // ============================================================
-                // PANEL 0: QWERTY Letter Keyboard
-                // ============================================================
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 5
+                // Row 1: 1 2 3 4 5 6 7 8 9 0
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     spacing: 4
-                    visible: root.panelIndex === 0
 
-                    // Row 1: Q W E R T Y U I O P
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        Repeater {
-                            model: [
-                                { k: "q", sub: "1" }, { k: "w", sub: "2" }, { k: "e", sub: "3" },
-                                { k: "r", sub: "4" }, { k: "t", sub: "5" }, { k: "y", sub: "6" },
-                                { k: "u", sub: "7" }, { k: "i", sub: "8" }, { k: "o", sub: "9" },
-                                { k: "p", sub: "0" }
-                            ]
-                            delegate: KeyButton {
-                                required property var modelData
-                                text: InputEngine.capsLock ? modelData.k.toUpperCase() : modelData.k
-                                subText: modelData.sub
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleKeyPress(text)
-                                }
-                            }
-                        }
-                    }
-
-                    // Row 2: A S D F G H J K L
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.leftMargin: 22
-                        Layout.rightMargin: 22
-                        spacing: 4
-
-                        Repeater {
-                            model: ["a", "s", "d", "f", "g", "h", "j", "k", "l"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: InputEngine.capsLock ? modelData.toUpperCase() : modelData
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleKeyPress(text)
-                                }
-                            }
-                        }
-                    }
-
-                    // Row 3: CapsLock + Z X C V B N M + Backspace (Long-press auto-repeat)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        KeyButton {
-                            text: "⇧ 大写"
-                            isFunctionKey: true
-                            isActiveState: InputEngine.capsLock
-                            showStatusDot: true
-                            statusActive: InputEngine.capsLock
+                    Repeater {
+                        model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
                             darkTheme: root.darkTheme
-                            Layout.preferredWidth: 74
-                            onClicked: InputEngine.toggleCapsLock()
-                        }
-
-                        Repeater {
-                            model: ["z", "x", "c", "v", "b", "n", "m"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: InputEngine.capsLock ? modelData.toUpperCase() : modelData
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleKeyPress(text)
-                                }
-                            }
-                        }
-
-                        KeyButton {
-                            text: "⌫ 退格"
-                            isFunctionKey: true
-                            autoRepeat: true
-                            repeatDelay: 400
-                            repeatInterval: 50
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 78
-                            onClicked: InputEngine.handleBackspace()
-                        }
-                    }
-
-                    // Row 4: 123 | 中/英 | _ | Space | . | 收起 | 确定(Enter)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        KeyButton {
-                            text: "123/符"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 68
-                            onClicked: {
-                                InputEngine.clearPinyinBuffer()
-                                root.panelIndex = 1
-                            }
-                        }
-
-                        KeyButton {
-                            text: InputEngine.passwordMode
-                                  ? "🔒 英数"
-                                  : (InputEngine.chineseMode ? "中 / 英" : "英 / 中")
-                            isFunctionKey: true
-                            isActiveState: InputEngine.chineseMode && !InputEngine.passwordMode
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 68
-                            onClicked: InputEngine.toggleLanguageMode()
-                        }
-
-                        KeyButton {
-                            text: "_"
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 46
-                            onClicked: {
-                                root.showHistoryPopup = false
-                                InputEngine.handleSymbolPress("_")
-                            }
-                        }
-
-                        KeyButton {
-                            text: InputEngine.passwordMode
-                                  ? "🔒 密码安全模式 (仅英数·禁历史)"
-                                  : (InputEngine.chineseMode ? "空格 (中文拼音)" : "Space (English)")
-                            isFunctionKey: true
-                            fontPixelSize: 14
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 230
-                            onClicked: {
-                                root.showHistoryPopup = false
-                                InputEngine.handleSpace()
-                            }
-                        }
-
-                        KeyButton {
-                            text: "."
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 46
-                            onClicked: {
-                                root.showHistoryPopup = false
-                                InputEngine.handleSymbolPress(".")
-                            }
-                        }
-
-                        KeyButton {
-                            text: "▼ 收起"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 66
-                            onClicked: root.closeKeyboard()
-                        }
-
-                        KeyButton {
-                            text: "↵ 确定"
-                            isFunctionKey: true
-                            isPrimaryKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 82
-                            onClicked: {
-                                InputEngine.handleEnter()
-                                root.closeKeyboard()
-                            }
+                            onClicked: InputEngine.handleSymbolPress(modelData)
                         }
                     }
                 }
 
-                // ============================================================
-                // PANEL 1: 123 Numbers & High-Frequency Industrial Symbols
-                // ============================================================
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 5
+                // Row 2: Industrial Common Symbols (_ @ - . / # : + = *)
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     spacing: 4
-                    visible: root.panelIndex === 1
 
-                    // Row 1: 1 2 3 4 5 6 7 8 9 0
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        Repeater {
-                            model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleSymbolPress(modelData)
-                                }
-                            }
-                        }
-                    }
-
-                    // Row 2: Industrial Common Symbols (_ @ - . / # : + = *)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        Repeater {
-                            model: ["_", "@", "-", ".", "/", "#", ":", "+", "=", "*"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleSymbolPress(modelData)
-                                }
-                            }
-                        }
-                    }
-
-                    // Row 3: More Symbols + ( ) [ ] % & ? ! + Backspace
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        KeyButton {
-                            text: "#+= 更多"
-                            isFunctionKey: true
+                    Repeater {
+                        model: ["_", "@", "-", ".", "/", "#", ":", "+", "=", "*"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
                             darkTheme: root.darkTheme
-                            Layout.preferredWidth: 76
-                            onClicked: root.panelIndex = 2
-                        }
-
-                        Repeater {
-                            model: ["(", ")", "[", "]", "%", "&", "?", "!"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: {
-                                    root.showHistoryPopup = false
-                                    InputEngine.handleSymbolPress(modelData)
-                                }
-                            }
-                        }
-
-                        KeyButton {
-                            text: "⌫ 退格"
-                            isFunctionKey: true
-                            autoRepeat: true
-                            repeatDelay: 400
-                            repeatInterval: 50
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 78
-                            onClicked: InputEngine.handleBackspace()
-                        }
-                    }
-
-                    // Row 4: ABC | 中/英 | , | Space | : | 收起 | 确定
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-
-                        KeyButton {
-                            text: "ABC 返回"
-                            isFunctionKey: true
-                            isActiveState: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 76
-                            onClicked: root.panelIndex = 0
-                        }
-
-                        KeyButton {
-                            text: InputEngine.passwordMode ? "🔒 英数" : "中 / 英"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 68
-                            onClicked: {
-                                root.panelIndex = 0
-                                InputEngine.toggleLanguageMode()
-                            }
-                        }
-
-                        KeyButton {
-                            text: ","
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 46
-                            onClicked: InputEngine.handleSymbolPress(",")
-                        }
-
-                        KeyButton {
-                            text: "Space 空格"
-                            isFunctionKey: true
-                            fontPixelSize: 14
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 222
-                            onClicked: InputEngine.handleSpace()
-                        }
-
-                        KeyButton {
-                            text: ";"
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 46
-                            onClicked: InputEngine.handleSymbolPress(";")
-                        }
-
-                        KeyButton {
-                            text: "▼ 收起"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 66
-                            onClicked: root.closeKeyboard()
-                        }
-
-                        KeyButton {
-                            text: "↵ 确定"
-                            isFunctionKey: true
-                            isPrimaryKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 82
-                            onClicked: {
-                                InputEngine.handleEnter()
-                                root.closeKeyboard()
-                            }
+                            onClicked: InputEngine.handleSymbolPress(modelData)
                         }
                     }
                 }
 
-                // ============================================================
-                // PANEL 2: Extended Industrial Symbols Keyboard
-                // ============================================================
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 5
+                // Row 3: More Symbols + ( ) [ ] % & ? ! + Backspace
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     spacing: 4
-                    visible: root.panelIndex === 2
 
-                    // Row 1
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
+                    KeyButton {
+                        text: root.isZhLabel ? "#+= \u66f4\u591a" : "#+= More"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 76
+                        onClicked: root.panelIndex = 2
+                    }
 
-                        Repeater {
-                            model: ["~", "`", "!", "@", "#", "$", "%", "^", "&", "*"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: InputEngine.handleSymbolPress(modelData)
-                            }
+                    Repeater {
+                        model: ["(", ")", "[", "]", "%", "&", "?", "!"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleSymbolPress(modelData)
                         }
                     }
 
-                    // Row 2
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
+                    KeyButton {
+                        text: root.isZhLabel ? "\u232b \u9000\u683c" : "\u232b Back"
+                        isFunctionKey: true
+                        autoRepeat: true
+                        repeatDelay: 400
+                        repeatInterval: 50
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 78
+                        onClicked: InputEngine.handleBackspace()
+                    }
+                }
 
-                        Repeater {
-                            model: ["{", "}", "[", "]", "<", ">", "|", "\\", "/", "?"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: InputEngine.handleSymbolPress(modelData)
-                            }
+                // Row 4: ABC | 中/英 | , | Space | ; | 收起 | 确定
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    KeyButton {
+                        text: root.isZhLabel ? "ABC \u8fd4\u56de" : "ABC"
+                        isFunctionKey: true
+                        isActiveState: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 76
+                        onClicked: root.panelIndex = 0
+                    }
+
+                    KeyButton {
+                        text: root.langButtonRichText()
+                        richText: true
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 68
+                        onClicked: {
+                            root.panelIndex = 0
+                            InputEngine.toggleLanguageMode()
                         }
                     }
 
-                    // Row 3
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
+                    KeyButton {
+                        text: ","
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 46
+                        onClicked: InputEngine.handleSymbolPress(",")
+                    }
 
-                        KeyButton {
-                            text: "123 数字"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 76
-                            onClicked: root.panelIndex = 1
+                    KeyButton {
+                        text: root.isZhLabel ? "\u7a7a\u683c" : "Space"
+                        isFunctionKey: true
+                        fontPixelSize: 15
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 222
+                        onClicked: InputEngine.handleSpace()
+                    }
+
+                    KeyButton {
+                        text: ";"
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 46
+                        onClicked: InputEngine.handleSymbolPress(";")
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u25bc \u6536\u8d77" : "\u25bc Hide"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 66
+                        onClicked: root.closeKeyboard()
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u21b5 \u786e\u5b9a" : "\u21b5 Enter"
+                        isFunctionKey: true
+                        isPrimaryKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 82
+                        onClicked: {
+                            InputEngine.handleEnter()
+                            root.closeKeyboard()
                         }
+                    }
+                }
+            }
 
-                        Repeater {
-                            model: ["'", "\"", ":", ";", ",", ".", "-", "_"]
-                            delegate: KeyButton {
-                                required property string modelData
-                                text: modelData
-                                darkTheme: root.darkTheme
-                                onClicked: InputEngine.handleSymbolPress(modelData)
-                            }
-                        }
+            // ============================================================
+            // PANEL 2: Extended Industrial Symbols Keyboard
+            // ============================================================
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 5
+                spacing: 4
+                visible: root.panelIndex === 2
 
-                        KeyButton {
-                            text: "⌫ 退格"
-                            isFunctionKey: true
-                            autoRepeat: true
-                            repeatDelay: 400
-                            repeatInterval: 50
+                // Row 1
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    Repeater {
+                        model: ["~", "`", "!", "@", "#", "$", "%", "^", "&", "*"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
                             darkTheme: root.darkTheme
-                            Layout.preferredWidth: 78
-                            onClicked: InputEngine.handleBackspace()
+                            onClicked: InputEngine.handleSymbolPress(modelData)
+                        }
+                    }
+                }
+
+                // Row 2
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    Repeater {
+                        model: ["{", "}", "[", "]", "<", ">", "|", "\\", "/", "?"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleSymbolPress(modelData)
+                        }
+                    }
+                }
+
+                // Row 3
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+
+                    KeyButton {
+                        text: root.isZhLabel ? "123 \u6570\u5b57" : "123 Num"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 76
+                        onClicked: root.panelIndex = 1
+                    }
+
+                    Repeater {
+                        model: ["'", "\"", ":", ";", ",", ".", "-", "_"]
+                        delegate: KeyButton {
+                            required property string modelData
+                            text: modelData
+                            darkTheme: root.darkTheme
+                            onClicked: InputEngine.handleSymbolPress(modelData)
                         }
                     }
 
-                    // Row 4
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
+                    KeyButton {
+                        text: root.isZhLabel ? "\u232b \u9000\u683c" : "\u232b Back"
+                        isFunctionKey: true
+                        autoRepeat: true
+                        repeatDelay: 400
+                        repeatInterval: 50
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 78
+                        onClicked: InputEngine.handleBackspace()
+                    }
+                }
 
-                        KeyButton {
-                            text: "ABC 返回"
-                            isFunctionKey: true
-                            isActiveState: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 76
-                            onClicked: root.panelIndex = 0
-                        }
+                // Row 4
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
 
-                        KeyButton {
-                            text: "+"
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 56
-                            onClicked: InputEngine.handleSymbolPress("+")
-                        }
+                    KeyButton {
+                        text: root.isZhLabel ? "ABC \u8fd4\u56de" : "ABC"
+                        isFunctionKey: true
+                        isActiveState: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 76
+                        onClicked: root.panelIndex = 0
+                    }
 
-                        KeyButton {
-                            text: "="
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 56
-                            onClicked: InputEngine.handleSymbolPress("=")
-                        }
+                    KeyButton {
+                        text: "+"
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 56
+                        onClicked: InputEngine.handleSymbolPress("+")
+                    }
 
-                        KeyButton {
-                            text: "Space 空格"
-                            isFunctionKey: true
-                            fontPixelSize: 14
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 242
-                            onClicked: InputEngine.handleSpace()
-                        }
+                    KeyButton {
+                        text: "="
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 56
+                        onClicked: InputEngine.handleSymbolPress("=")
+                    }
 
-                        KeyButton {
-                            text: "±"
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 46
-                            onClicked: InputEngine.handleSymbolPress("±")
-                        }
+                    KeyButton {
+                        text: root.isZhLabel ? "\u7a7a\u683c" : "Space"
+                        isFunctionKey: true
+                        fontPixelSize: 15
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 242
+                        onClicked: InputEngine.handleSpace()
+                    }
 
-                        KeyButton {
-                            text: "▼ 收起"
-                            isFunctionKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 66
-                            onClicked: root.closeKeyboard()
-                        }
+                    KeyButton {
+                        text: "\u00b1"
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 46
+                        onClicked: InputEngine.handleSymbolPress("\u00b1")
+                    }
 
-                        KeyButton {
-                            text: "↵ 确定"
-                            isFunctionKey: true
-                            isPrimaryKey: true
-                            darkTheme: root.darkTheme
-                            Layout.preferredWidth: 82
-                            onClicked: {
-                                InputEngine.handleEnter()
-                                root.closeKeyboard()
-                            }
+                    KeyButton {
+                        text: root.isZhLabel ? "\u25bc \u6536\u8d77" : "\u25bc Hide"
+                        isFunctionKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 66
+                        onClicked: root.closeKeyboard()
+                    }
+
+                    KeyButton {
+                        text: root.isZhLabel ? "\u21b5 \u786e\u5b9a" : "\u21b5 Enter"
+                        isFunctionKey: true
+                        isPrimaryKey: true
+                        darkTheme: root.darkTheme
+                        Layout.preferredWidth: 82
+                        onClicked: {
+                            InputEngine.handleEnter()
+                            root.closeKeyboard()
                         }
                     }
                 }
@@ -712,4 +642,3 @@ Item {
         }
     }
 }
-

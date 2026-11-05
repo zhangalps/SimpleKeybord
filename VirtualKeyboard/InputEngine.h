@@ -27,9 +27,6 @@ class InputEngine : public QObject
     Q_PROPERTY(int currentPage READ currentPage NOTIFY candidatesChanged FINAL)
     Q_PROPERTY(bool hasPrevPage READ hasPrevPage NOTIFY candidatesChanged FINAL)
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY candidatesChanged FINAL)
-    Q_PROPERTY(bool historyEnabled READ historyEnabled NOTIFY historyStateChanged FINAL)
-    Q_PROPERTY(QString currentHistoryKey READ currentHistoryKey NOTIFY historyStateChanged FINAL)
-    Q_PROPERTY(QStringList historyList READ historyList NOTIFY historyStateChanged FINAL)
     Q_PROPERTY(bool dictionaryReady READ dictionaryReady NOTIFY dictionaryReadyChanged FINAL)
 
 public:
@@ -57,9 +54,6 @@ public:
     bool hasPrevPage() const { return m_currentPage > 0; }
     bool hasNextPage() const;
 
-    bool historyEnabled() const { return m_historyEnabled; }
-    QString currentHistoryKey() const { return m_currentHistoryKey; }
-    QStringList historyList() const { return m_historyList; }
     bool dictionaryReady() const { return m_dictionaryReady; }
 
     // QML Invokable Methods
@@ -81,11 +75,6 @@ public:
     Q_INVOKABLE void toggleLanguageMode();
     Q_INVOKABLE void toggleCapsLock();
 
-    Q_INVOKABLE void applyHistoryItem(const QString &text);
-    Q_INVOKABLE void commitHistory(const QString &key, const QString &value);
-    Q_INVOKABLE void clearCurrentHistory();
-    Q_INVOKABLE void clearHistory(const QString &key);
-
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
@@ -96,7 +85,6 @@ signals:
     void darkThemeChanged();
     void pinyinBufferChanged();
     void candidatesChanged();
-    void historyStateChanged();
     void dictionaryReadyChanged();
     void requestShowKeyboard();
     void requestHideKeyboard();
@@ -106,11 +94,9 @@ private:
     void updatePageSlice();
     void injectTextToTarget(const QString &text);
     void injectBackspaceToTarget();
-    void loadHistoryForKey(const QString &key);
     bool checkIsPasswordInput(QObject *item) const;
 
     static constexpr int kPageSize = 7;
-    static constexpr int kMaxHistoryCount = 10;
 
     QString m_globalLanguage = QStringLiteral("zh_CN");
     bool m_chineseMode = true;
@@ -128,11 +114,6 @@ private:
     QStringList m_pageCandidates;
     int m_currentPage = 0;
 
-    bool m_historyEnabled = false;
-    QString m_currentHistoryKey;
-    QStringList m_historyList;
-
     std::shared_ptr<ime_pinyin::PinyinDecoder> m_decoder;
     QFutureWatcher<bool> m_dictWatcher;
 };
-

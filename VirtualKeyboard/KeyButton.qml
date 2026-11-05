@@ -6,6 +6,7 @@ Item {
 
     property string text: ""
     property string subText: ""
+    property bool richText: false
     property bool isFunctionKey: false
     property bool isPrimaryKey: false
     property bool isActiveState: false
@@ -130,10 +131,11 @@ Item {
 
         // Main key label
         Text {
-            anchors.centerIn: parent
+            anchors.fill: parent
             text: root.text
+            textFormat: root.richText ? Text.RichText : Text.PlainText
             font.pixelSize: root.fontPixelSize
-            font.bold: !root.isFunctionKey || root.isPrimaryKey
+            font.bold: !root.richText && (!root.isFunctionKey || root.isPrimaryKey)
             font.family: "Microsoft YaHei UI"
             color: root.textColor
             horizontalAlignment: Text.AlignHCenter

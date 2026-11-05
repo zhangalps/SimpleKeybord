@@ -6,8 +6,8 @@
 #include <QKeyEvent>
 #include <QMetaObject>
 #include <QMetaProperty>
-#include <QSettings>
 #include <QtConcurrent/QtConcurrentRun>
+#include <algorithm>
 
 InputEngine::InputEngine(QObject *parent)
     : QObject(parent)
@@ -21,7 +21,6 @@ InputEngine::InputEngine(QObject *parent)
         }
     });
 
-    // Load dictionary asynchronously on background worker thread
     auto decoderPtr = m_decoder;
     m_dictWatcher.setFuture(QtConcurrent::run([decoderPtr]() {
         return decoderPtr->loadDictionary();
@@ -135,10 +134,6 @@ void InputEngine::bindTargetItem(QObject *item)
             m_passwordMode = false;
             emit passwordModeChanged();
         }
-        m_historyEnabled = false;
-        m_currentHistoryKey.clear();
-        m_historyList.clear();
-        emit historyStateChanged();
         return;
     }
 
@@ -151,36 +146,10 @@ void InputEngine::bindTargetItem(QObject *item)
     }
 
     if (m_passwordMode) {
-        // Security enforcement for password inputs:
-        // 1. Force English/alphanumeric mode
-        // 2. Disable candidate bar
-        // 3. Strictly prohibit history access or recording
         setChineseMode(false);
-        m_historyEnabled = false;
-        m_currentHistoryKey.clear();
-        m_historyList.clear();
-        emit historyStateChanged();
     } else {
         const bool defaultZh = m_globalLanguage.startsWith(QStringLiteral("zh"), Qt::CaseInsensitive);
         setChineseMode(defaultZh);
-
-        auto *attached = qobject_cast<KeyboardAttachedType *>(
-            qmlAttachedPropertiesObject<KeyboardProp>(m_targetItem, false));
-        if (attached && attached->enableHistory()) {
-            m_historyEnabled = true;
-            m_currentHistoryKey = attached->historyKey().isEmpty()
-                                      ? m_targetItem->objectName()
-                                      : attached->historyKey();
-            if (m_currentHistoryKey.isEmpty()) {
-                m_currentHistoryKey = QStringLiteral("default_input");
-            }
-            loadHistoryForKey(m_currentHistoryKey);
-        } else {
-            m_historyEnabled = false;
-            m_currentHistoryKey.clear();
-            m_historyList.clear();
-        }
-        emit historyStateChanged();
     }
 }
 
@@ -199,7 +168,6 @@ void InputEngine::handleKeyPress(const QString &key)
     if (!m_targetItem || key.isEmpty())
         return;
 
-    // In Chinese mode (and not password mode & not CapsLock), lowercase a-z goes into Pinyin buffer
     const QChar ch = key.at(0);
     if (m_chineseMode && !m_passwordMode && !m_capsLock && ch.isLower() && ch >= u'a' && ch <= u'z') {
         if (m_pinyinBuffer.length() < 32) {
@@ -209,7 +177,6 @@ void InputEngine::handleKeyPress(const QString &key)
         return;
     }
 
-    // If there is pending pinyin buffer when typing uppercase, commit raw pinyin first
     if (!m_pinyinBuffer.isEmpty()) {
         injectTextToTarget(m_composedPrefix + m_pinyinBuffer);
         clearPinyinBuffer();
@@ -223,7 +190,6 @@ void InputEngine::handleSymbolPress(const QString &symbol)
     if (!m_targetItem || symbol.isEmpty())
         return;
 
-    // If in Chinese mode with active pinyin buffer, commit top candidate first
     if (!m_pinyinBuffer.isEmpty()) {
         if (!m_allCandidates.isEmpty()) {
             injectTextToTarget(m_composedPrefix + m_allCandidates.first());
@@ -235,19 +201,19 @@ void InputEngine::handleSymbolPress(const QString &symbol)
 
     if (m_chineseMode && !m_passwordMode) {
         if (symbol == QStringLiteral(".")) {
-            injectTextToTarget(QStringLiteral("。"));
+            injectTextToTarget(QStringLiteral("\u3002"));
             return;
         }
         if (symbol == QStringLiteral(",")) {
-            injectTextToTarget(QStringLiteral("，"));
+            injectTextToTarget(QStringLiteral("\uff0c"));
             return;
         }
         if (symbol == QStringLiteral("?")) {
-            injectTextToTarget(QStringLiteral("？"));
+            injectTextToTarget(QStringLiteral("\uff1f"));
             return;
         }
         if (symbol == QStringLiteral("!")) {
-            injectTextToTarget(QStringLiteral("！"));
+            injectTextToTarget(QStringLiteral("\uff01"));
             return;
         }
     }
@@ -273,7 +239,6 @@ void InputEngine::handleBackspace()
 void InputEngine::handleSpace()
 {
     if (!m_pinyinBuffer.isEmpty()) {
-        // Space selects the first candidate on current page
         selectCandidate(0);
         return;
     }
@@ -288,15 +253,6 @@ void InputEngine::handleEnter()
     }
 
     if (m_targetItem) {
-        // Record history if enabled and not a password input
-        if (m_historyEnabled && !m_passwordMode && !m_currentHistoryKey.isEmpty()) {
-            const QString currentVal = m_targetItem->property("text").toString().trimmed();
-            if (!currentVal.isEmpty()) {
-                commitHistory(m_currentHistoryKey, currentVal);
-            }
-        }
-
-        // Send Return key event so target TextField.onAccepted triggers naturally
         QKeyEvent pressEvt(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
         QKeyEvent releaseEvt(QEvent::KeyRelease, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
         QCoreApplication::sendEvent(m_targetItem, &pressEvt);
@@ -324,7 +280,6 @@ void InputEngine::selectCandidate(int pageIndex)
         injectTextToTarget(m_composedPrefix + chosen);
         clearPinyinBuffer();
     } else {
-        // Partial syllable selection: keep composed prefix and continue matching remaining pinyin
         m_composedPrefix.append(chosen);
         m_pinyinBuffer = m_pinyinBuffer.mid(consumed);
         updatePinyinSearch();
@@ -419,7 +374,6 @@ void InputEngine::injectTextToTarget(const QString &text)
     if (!m_targetItem || text.isEmpty())
         return;
 
-    // Delete active selection if present
     const int selStart = m_targetItem->property("selectionStart").toInt();
     const int selEnd = m_targetItem->property("selectionEnd").toInt();
     QString curText = m_targetItem->property("text").toString();
@@ -459,65 +413,3 @@ void InputEngine::injectBackspaceToTarget()
         m_targetItem->setProperty("cursorPosition", cursorPos - 1);
     }
 }
-
-void InputEngine::applyHistoryItem(const QString &text)
-{
-    if (!m_targetItem || m_passwordMode)
-        return;
-    clearPinyinBuffer();
-    m_targetItem->setProperty("text", text);
-    m_targetItem->setProperty("cursorPosition", text.length());
-}
-
-void InputEngine::loadHistoryForKey(const QString &key)
-{
-    if (m_passwordMode || key.isEmpty()) {
-        m_historyList.clear();
-        return;
-    }
-    QSettings settings;
-    m_historyList = settings.value(QStringLiteral("InputHistory/") + key).toStringList();
-}
-
-void InputEngine::commitHistory(const QString &key, const QString &value)
-{
-    if (m_passwordMode || key.isEmpty() || value.trimmed().isEmpty())
-        return;
-
-    const QString cleanVal = value.trimmed();
-    QSettings settings;
-    const QString settingKey = QStringLiteral("InputHistory/") + key;
-    QStringList list = settings.value(settingKey).toStringList();
-
-    list.removeAll(cleanVal);
-    list.prepend(cleanVal);
-    while (list.size() > kMaxHistoryCount) {
-        list.removeLast();
-    }
-
-    settings.setValue(settingKey, list);
-    if (m_currentHistoryKey == key) {
-        m_historyList = list;
-        emit historyStateChanged();
-    }
-}
-
-void InputEngine::clearCurrentHistory()
-{
-    if (!m_currentHistoryKey.isEmpty()) {
-        clearHistory(m_currentHistoryKey);
-    }
-}
-
-void InputEngine::clearHistory(const QString &key)
-{
-    if (key.isEmpty())
-        return;
-    QSettings settings;
-    settings.remove(QStringLiteral("InputHistory/") + key);
-    if (m_currentHistoryKey == key) {
-        m_historyList.clear();
-        emit historyStateChanged();
-    }
-}
-

@@ -62,8 +62,8 @@ ApplicationWindow {
 
                 Text {
                     text: window.isZh
-                          ? "工控上位机终端 (7寸 800×480)"
-                          : "Industrial HMI Terminal (800×480)"
+                          ? "\u5de5\u63a7\u4e0a\u4f4d\u673a\u7ec8\u7aef (7\u5bf8 800\u00d7480)"
+                          : "Industrial HMI Terminal (800\u00d7480)"
                     font.pixelSize: 17
                     font.bold: true
                     font.family: "Microsoft YaHei UI"
@@ -72,8 +72,8 @@ ApplicationWindow {
 
                 Text {
                     text: InputEngine.dictionaryReady
-                          ? (window.isZh ? "[词库已就绪]" : "[Dict Ready]")
-                          : (window.isZh ? "[词库加载中...]" : "[Loading Dict...]")
+                          ? (window.isZh ? "[\u8bcd\u5e93\u5df2\u5c31\u7eea]" : "[Dict Ready]")
+                          : (window.isZh ? "[\u8bcd\u5e93\u52a0\u8f7d\u4e2d...]" : "[Loading Dict...]")
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
                     color: InputEngine.dictionaryReady ? "#22C55E" : "#F59E0B"
@@ -94,7 +94,7 @@ ApplicationWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: window.isZh ? "🌐 语言: 中文" : "🌐 Lang: EN"
+                        text: window.isZh ? "\ud83c\udf10 \u8bed\u8a00: \u4e2d\u6587" : "\ud83c\udf10 Lang: EN"
                         font.pixelSize: 13
                         font.bold: true
                         font.family: "Microsoft YaHei UI"
@@ -123,7 +123,7 @@ ApplicationWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: window.dark ? "🌙 工控深色" : "☀️ 现代浅色"
+                        text: window.dark ? "\ud83c\udf19 \u5de5\u63a7\u6df1\u8272" : "\u2600\ufe0f \u73b0\u4ee3\u6d45\u8272"
                         font.pixelSize: 13
                         font.bold: true
                         font.family: "Microsoft YaHei UI"
@@ -164,7 +164,7 @@ ApplicationWindow {
                     spacing: 10
 
                     Text {
-                        text: window.isZh ? "操作员安全登录与站点配置" : "Operator Login & Station Setup"
+                        text: window.isZh ? "\u64cd\u4f5c\u5458\u5b89\u5168\u767b\u5f55\u4e0e\u7ad9\u70b9\u914d\u7f6e" : "Operator Login & Station Setup"
                         font.pixelSize: 18
                         font.bold: true
                         font.family: "Microsoft YaHei UI"
@@ -189,13 +189,13 @@ ApplicationWindow {
                     color: window.dark ? "#243046" : "#E2E8F0"
                 }
 
-                // Field 1: User Account (Supports History Dropdown + Auto Language Mode)
+                // Field 1: User Account
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
                     Text {
-                        text: window.isZh ? "操作员账号 :" : "Operator ID :"
+                        text: window.isZh ? "\u64cd\u4f5c\u5458\u8d26\u53f7 :" : "Operator ID :"
                         Layout.preferredWidth: 110
                         font.pixelSize: 15
                         font.bold: true
@@ -209,8 +209,8 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         placeholderText: window.isZh
-                                         ? "点击输入账号 (支持中文拼音与历史记忆补全)"
-                                         : "Tap to enter operator ID (History enabled)"
+                                         ? "\u70b9\u51fb\u8f93\u5165\u8d26\u53f7 (\u8f93\u5165\u62fc\u97f3\u65f6\u81ea\u52a8\u663e\u793a\u5019\u9009\u8bcd\u680f)"
+                                         : "Tap to enter operator ID"
                         font.pixelSize: 16
                         font.family: "Microsoft YaHei UI"
                         color: window.dark ? "#F8FAFC" : "#0F172A"
@@ -218,10 +218,6 @@ ApplicationWindow {
                         verticalAlignment: TextInput.AlignVCenter
                         leftPadding: 12
                         rightPadding: 12
-
-                        // Enable history popup for User field
-                        KeyboardProp.enableHistory: true
-                        KeyboardProp.historyKey: "login_user"
 
                         background: Rectangle {
                             radius: 6
@@ -234,13 +230,13 @@ ApplicationWindow {
                     }
                 }
 
-                // Field 2: Password Field (Lower position -> Auto Page Lift + Forced Alphanumeric + No History)
+                // Field 2: Password Field (Lower position -> Auto Page Lift + Forced Alphanumeric)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
                     Text {
-                        text: window.isZh ? "安全密码 :" : "Password :"
+                        text: window.isZh ? "\u5b89\u5168\u5bc6\u7801 :" : "Password :"
                         Layout.preferredWidth: 110
                         font.pixelSize: 15
                         font.bold: true
@@ -255,8 +251,8 @@ ApplicationWindow {
                         Layout.preferredHeight: 44
                         echoMode: TextInput.Password
                         placeholderText: window.isZh
-                                         ? "强制锁定英数模式 · 隐藏候选栏 · 严禁历史记录"
-                                         : "Forced Alphanumeric · No Candidates · No History"
+                                         ? "\u5f3a\u5236\u9501\u5b9a\u82f1\u6570\u6a21\u5f0f \u00b7 \u7981\u7528\u62fc\u97f3\u5019\u9009\u680f"
+                                         : "Forced Alphanumeric \u00b7 No Candidates"
                         font.pixelSize: 16
                         font.family: "Microsoft YaHei UI"
                         color: window.dark ? "#F8FAFC" : "#0F172A"
@@ -264,10 +260,6 @@ ApplicationWindow {
                         verticalAlignment: TextInput.AlignVCenter
                         leftPadding: 12
                         rightPadding: 12
-
-                        // Even if someone sets enableHistory on a password field, InputEngine strictly blocks it
-                        KeyboardProp.enableHistory: true
-                        KeyboardProp.historyKey: "should_never_record"
 
                         background: Rectangle {
                             radius: 6
@@ -280,13 +272,13 @@ ApplicationWindow {
                     }
                 }
 
-                // Field 3: Bottom PLC Station / Batch Input (Demonstrates larger Page Lift + History + Symbols)
+                // Field 3: Bottom PLC Station / Batch Input (Demonstrates larger Page Lift + Symbols)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
                     Text {
-                        text: window.isZh ? "工位/批次号 :" : "PLC Batch :"
+                        text: window.isZh ? "\u5de5\u4f4d/\u6279\u6b21\u53f7 :" : "PLC Batch :"
                         Layout.preferredWidth: 110
                         font.pixelSize: 15
                         font.bold: true
@@ -301,8 +293,8 @@ ApplicationWindow {
                         Layout.preferredHeight: 44
                         text: "PLC_LINE_01#A"
                         placeholderText: window.isZh
-                                         ? "位于界面底部 · 聚焦时自动向上平滑推顶防遮挡"
-                                         : "Bottom field · Auto page-lift anti-occlusion test"
+                                         ? "\u4f4d\u4e8e\u754c\u9762\u5e95\u90e8 \u00b7 \u805a\u7126\u65f6\u81ea\u52a8\u5411\u4e0a\u5e73\u6ed1\u63a8\u9876\u9632\u906e\u6321"
+                                         : "Bottom field \u00b7 Auto page-lift anti-occlusion test"
                         font.pixelSize: 16
                         font.family: "Microsoft YaHei UI"
                         color: window.dark ? "#F8FAFC" : "#0F172A"
@@ -310,9 +302,6 @@ ApplicationWindow {
                         verticalAlignment: TextInput.AlignVCenter
                         leftPadding: 12
                         rightPadding: 12
-
-                        KeyboardProp.enableHistory: true
-                        KeyboardProp.historyKey: "plc_station_batch"
 
                         background: Rectangle {
                             radius: 6
@@ -344,7 +333,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: window.isZh ? "清空表单" : "Reset Fields"
+                            text: window.isZh ? "\u6e05\u7a7a\u8868\u5355" : "Reset Fields"
                             font.pixelSize: 15
                             font.bold: true
                             font.family: "Microsoft YaHei UI"
@@ -358,7 +347,7 @@ ApplicationWindow {
                                 userField.text = ""
                                 passwordField.text = ""
                                 stationField.text = ""
-                                window.statusToast = window.isZh ? "已清空所有输入内容" : "All fields cleared"
+                                window.statusToast = window.isZh ? "\u5df2\u6e05\u7a7a\u6240\u6709\u8f93\u5165\u5185\u5bb9" : "All fields cleared"
                             }
                         }
                     }
@@ -373,7 +362,7 @@ ApplicationWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: window.isZh ? "✓ 确认登录 (保存账号历史)" : "✓ Sign In (Save History)"
+                            text: window.isZh ? "\u2713 \u786e\u8ba4\u767b\u5f55" : "\u2713 Sign In"
                             font.pixelSize: 15
                             font.bold: true
                             font.family: "Microsoft YaHei UI"
@@ -384,15 +373,9 @@ ApplicationWindow {
                             id: loginBtnTouch
                             anchors.fill: parent
                             onClicked: {
-                                if (userField.text.trim().length > 0) {
-                                    InputEngine.commitHistory("login_user", userField.text)
-                                }
-                                if (stationField.text.trim().length > 0) {
-                                    InputEngine.commitHistory("plc_station_batch", stationField.text)
-                                }
                                 vKeyboard.closeKeyboard()
                                 window.statusToast = window.isZh
-                                                     ? ("登录成功: " + (userField.text || "匿名操作员"))
+                                                     ? ("\u767b\u5f55\u6210\u529f: " + (userField.text || "\u533f\u540d\u64cd\u4f5c\u5458"))
                                                      : ("Signed in: " + (userField.text || "Operator"))
                             }
                         }

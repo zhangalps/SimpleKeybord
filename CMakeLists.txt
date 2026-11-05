@@ -5,6 +5,12 @@ project(SimpleKeyborad VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "/Z7 /Ob0 /Od /RTC1" CACHE STRING "" FORCE)
+    set(CMAKE_C_FLAGS_DEBUG "/Z7 /Ob0 /Od /RTC1" CACHE STRING "" FORCE)
+    add_compile_options(/utf-8 /Z7)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Concurrent)
 
 qt_standard_project_setup(REQUIRES 6.10)
